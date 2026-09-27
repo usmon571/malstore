@@ -80,8 +80,14 @@
 </div>
 
 <div class="card">
-  <div class="label">Post ko'rinishi</div>
-  <div class="preview" id="preview"></div>
+  <div class="label" style="display:flex;justify-content:space-between;align-items:center">
+    <span>Post matni ✏️</span>
+    <button class="chip" id="reset" style="display:none">↻ Avtomatik</button>
+  </div>
+  <textarea id="preview" rows="16" spellcheck="false"></textarea>
+  <div class="muted" id="editNote" style="margin-top:6px">
+    Narx va nomni o'zgartirsangiz bu matn o'zi yangilanadi. Qo'lda tahrirlasangiz — o'zgarmay turadi.
+  </div>
 </div>
 
 <script>
@@ -109,9 +115,12 @@ function loadData(){
 }
 const D = loadData();
 
-const titleEl = document.getElementById("title");
-const rowsEl  = document.getElementById("rows");
-const markupEl= document.getElementById("markup");
+const titleEl  = document.getElementById("title");
+const rowsEl   = document.getElementById("rows");
+const markupEl = document.getElementById("markup");
+const previewEl= document.getElementById("preview");
+const resetBtn = document.getElementById("reset");
+let edited = false;  // post matni qo'lda tahrirlandimi
 titleEl.value = D.title || "";
 markupEl.value = "25%";
 document.getElementById("rateNote").textContent =
@@ -175,7 +184,8 @@ function calc(){
          </span><b>${fmtUzs(l.fin)}</b></div>`).join("")
     : `<div class="muted">Narxlarni kiriting</div>`;
 
-  document.getElementById("preview").textContent = buildPreview(finals);
+  // Qo'lda tahrirlanmagan bo'lsa — matnni yangilab turamiz
+  if(!edited) previewEl.value = buildPreview(finals);
 
   if(tg?.MainButton){
     if(!missing && Object.keys(finals).length){
@@ -216,6 +226,21 @@ function buildPreview(finals){
   return L.join("\n");
 }
 
+// Post matni qo'lda tahrirlanganini kuzatamiz
+previewEl.addEventListener("input", ()=>{
+  edited = true;
+  resetBtn.style.display = "inline-block";
+  document.getElementById("editNote").textContent =
+    "Matn qo'lda tahrirlandi — avtomatik yangilanmaydi.";
+});
+resetBtn.addEventListener("click", ()=>{
+  edited = false;
+  resetBtn.style.display = "none";
+  document.getElementById("editNote").textContent =
+    "Narx va nomni o'zgartirsangiz bu matn o'zi yangilanadi. Qo'lda tahrirlasangiz — o'zgarmay turadi.";
+  calc();
+});
+
 rowsEl.addEventListener("input", calc);
 titleEl.addEventListener("input", calc);
 markupEl.addEventListener("input", ()=>{
@@ -238,6 +263,7 @@ tg?.MainButton?.onClick(()=>{
     title: titleEl.value.trim(),
     prices: finals,
     markup: markupEl.value.trim(),
+    caption: previewEl.value,
   }));
 });
 
