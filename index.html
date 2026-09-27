@@ -45,6 +45,17 @@
   .total b{font-size:17px}
   .preview{white-space:pre-wrap; font-size:13.5px; line-height:1.5}
   .warn{color:#e0533d; font-size:12.5px; margin-top:8px; display:none}
+  .sendbtn{
+    width:100%; border:none; border-radius:12px; padding:15px;
+    background:var(--accent); color:var(--accent-text);
+    font:600 16px/1 inherit; cursor:pointer;
+  }
+  .sendbtn:disabled{opacity:.45}
+  .openbtn{
+    width:100%; border:1px solid var(--accent); border-radius:10px; padding:11px;
+    background:transparent; color:var(--accent);
+    font:600 14.5px/1 inherit; cursor:pointer; margin-bottom:12px;
+  }
   h2{margin:0 0 4px; font-size:17px}
 </style>
 </head>
@@ -58,6 +69,7 @@
 
 <div class="card">
   <div class="label">Poizon narxi (¥)</div>
+  <button id="openApp" class="openbtn" style="display:none">📱 Poizon ilovasida ochish</button>
   <div id="rows"></div>
   <div class="muted" id="rateNote"></div>
   <div class="warn" id="warn">Barcha hajmlar uchun narx kiriting</div>
@@ -65,12 +77,12 @@
 
 <div class="card">
   <div class="label">Ustama</div>
-  <input id="markup" inputmode="decimal" placeholder="masalan: 25% yoki 300000">
+  <input id="markup" inputmode="decimal" placeholder="masalan: 10% yoki 300000">
   <div class="chips">
+    <button class="chip" data-m="5%">5%</button>
+    <button class="chip on" data-m="10%">10%</button>
     <button class="chip" data-m="15%">15%</button>
-    <button class="chip on" data-m="25%">25%</button>
-    <button class="chip" data-m="35%">35%</button>
-    <button class="chip" data-m="50%">50%</button>
+    <button class="chip" data-m="20%">20%</button>
   </div>
 </div>
 
@@ -89,6 +101,9 @@
     Narx va nomni o'zgartirsangiz bu matn o'zi yangilanadi. Qo'lda tahrirlasangiz — o'zgarmay turadi.
   </div>
 </div>
+
+<button id="send" class="sendbtn">📤 Botga yuborish</button>
+<div class="warn" id="sendErr"></div>
 
 <script>
 const tg = window.Telegram?.WebApp;
@@ -122,7 +137,7 @@ const previewEl= document.getElementById("preview");
 const resetBtn = document.getElementById("reset");
 let edited = false;  // post matni qo'lda tahrirlandimi
 titleEl.value = D.title || "";
-markupEl.value = "25%";
+markupEl.value = "10%";
 document.getElementById("rateNote").textContent =
   `Kurs: 1 ¥ = ${fmtNum(D.rate)} so'm · Avto Kargo: ${fmtNum(D.kargoRate)} so'm/kg`;
 
@@ -187,12 +202,15 @@ function calc(){
   // Qo'lda tahrirlanmagan bo'lsa — matnni yangilab turamiz
   if(!edited) previewEl.value = buildPreview(finals);
 
+  const ready = !missing && Object.keys(finals).length > 0;
+  const sendBtn = document.getElementById("send");
+  if(sendBtn) sendBtn.disabled = !ready;
+
   if(tg?.MainButton){
-    if(!missing && Object.keys(finals).length){
-      tg.MainButton.setText("Botga yuborish").show().enable();
-    }else{
-      tg.MainButton.hide();
-    }
+    try{
+      if(ready) tg.MainButton.setText("Botga yuborish").show().enable();
+      else tg.MainButton.hide();
+    }catch(e){}
   }
   return finals;
 }
@@ -256,16 +274,55 @@ document.querySelectorAll(".chip").forEach(chip=>{
   });
 });
 
-tg?.MainButton?.onClick(()=>{
+function submit(){
+  const errEl = document.getElementById("sendErr");
+  errEl.style.display = "none";
+
   const finals = calc();
-  if(!Object.keys(finals).length) return;
-  tg.sendData(JSON.stringify({
+  if(!Object.keys(finals).length){
+    errEl.textContent = "Avval barcha hajmlar uchun narx kiriting";
+    errEl.style.display = "block";
+    return;
+  }
+  const payload = JSON.stringify({
     title: titleEl.value.trim(),
     prices: finals,
     markup: markupEl.value.trim(),
     caption: previewEl.value,
-  }));
-});
+  });
+
+  // Telegram sendData uchun chegara — 4096 bayt
+  if(new Blob([payload]).size > 4000){
+    errEl.textContent = "Matn juda uzun — qisqartiring";
+    errEl.style.display = "block";
+    return;
+  }
+  try{
+    if(!tg || !tg.sendData) throw new Error("Telegram ichida ochilmagan");
+    tg.sendData(payload);
+  }catch(e){
+    errEl.textContent = "Yuborilmadi: " + e.message;
+    errEl.style.display = "block";
+  }
+}
+
+document.getElementById("send").addEventListener("click", submit);
+tg?.MainButton?.onClick(submit);
+
+// Poizon ilovasida ochish: openLink tashqi brauzerda ochadi, u esa
+// ilovaga uzatadi (Telegram ichki brauzeri ilovaga o'tkazmaydi)
+const openBtn = document.getElementById("openApp");
+if(D.productUrl){
+  openBtn.style.display = "block";
+  openBtn.addEventListener("click", ()=>{
+    try{
+      if(tg?.openLink) tg.openLink(D.productUrl, {try_instant_view:false});
+      else window.open(D.productUrl, "_blank");
+    }catch(e){
+      window.open(D.productUrl, "_blank");
+    }
+  });
+}
 
 calc();
 </script>
