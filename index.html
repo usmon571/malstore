@@ -88,14 +88,24 @@
 const tg = window.Telegram?.WebApp;
 tg?.ready(); tg?.expand();
 
+function b64decode(s){
+  // URL-xavfsiz base64 → matn (UTF-8)
+  let t = s.replace(/-/g, "+").replace(/_/g, "/");
+  while(t.length % 4) t += "=";
+  return decodeURIComponent(escape(atob(t)));
+}
+
 function loadData(){
-  try{
-    const raw = decodeURIComponent(escape(atob(location.hash.slice(1))));
-    return JSON.parse(raw);
-  }catch(e){
-    return {title:"", sizes:[100], rate:1761.49, kargoRate:83880, overhead:250,
-            arrival:"", specs:{}, channel:"@malstoreoriginal", contact:"", brand:"Original"};
+  // Telegram "#" qismini o'zi egallaydi (tgWebAppData), shuning uchun
+  // ma'lumot "?d=" orqali keladi. Hash — zaxira variant.
+  const fromQuery = new URLSearchParams(location.search).get("d");
+  const fromHash  = location.hash.slice(1).split("&")[0];
+  for(const src of [fromQuery, fromHash]){
+    if(!src) continue;
+    try{ return JSON.parse(b64decode(src)); }catch(e){}
   }
+  return {title:"", sizes:[100], rate:1761.49, kargoRate:83880, overhead:250,
+          arrival:"", specs:{}, channel:"@malstoreoriginal", contact:"", brand:"Original"};
 }
 const D = loadData();
 
