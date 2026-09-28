@@ -72,7 +72,15 @@
   <button id="openApp" class="openbtn" style="display:none">📱 Poizon ilovasida ochish</button>
   <div id="rows"></div>
   <div class="muted" id="rateNote"></div>
-  <div class="warn" id="warn">Barcha hajmlar uchun narx kiriting</div>
+  <div class="warn" id="warn">Barcha variantlar uchun narx kiriting</div>
+</div>
+
+<div class="card" id="deliveryCard" style="display:none">
+  <div class="label">Yetkazib berish (so'm)</div>
+  <input id="delivery" inputmode="decimal" placeholder="masalan: 35000">
+  <div class="muted" id="deliveryNote" style="margin-top:6px">
+    Vaznni aniqlay olmadim — yetkazib berish narxini o'zingiz kiriting.
+  </div>
 </div>
 
 <div class="card">
@@ -125,8 +133,9 @@ function loadData(){
     if(!src) continue;
     try{ return JSON.parse(b64decode(src)); }catch(e){}
   }
-  return {title:"", sizes:[100], rate:1761.49, kargoRate:83880, overhead:250,
-          arrival:"", specs:{}, channel:"@malstoreoriginal", contact:"", brand:"Original"};
+  return {title:"", variants:[{label:"Narx", weightKg:null}], rate:1761.49,
+          kargoRate:83880, arrival:"", specs:{},
+          channel:"@malstoreoriginal", brand:"Original"};
 }
 const D = loadData();
 
@@ -135,28 +144,33 @@ const rowsEl   = document.getElementById("rows");
 const markupEl = document.getElementById("markup");
 const previewEl= document.getElementById("preview");
 const resetBtn = document.getElementById("reset");
+const deliveryEl = document.getElementById("delivery");
 let edited = false;  // post matni qo'lda tahrirlandimi
 titleEl.value = D.title || "";
 markupEl.value = "10%";
 document.getElementById("rateNote").textContent =
   `Kurs: 1 ¥ = ${fmtNum(D.rate)} so'm · Avto Kargo: ${fmtNum(D.kargoRate)} so'm/kg`;
 
-// hajm qatorlari
-D.sizes.forEach(size=>{
+// Variantlar: bot {label, weightKg} ko'rinishida yuboradi.
+// (eski ko'rinish — sizes: [50,100] — ham qo'llab-quvvatlanadi)
+const VARIANTS = D.variants || (D.sizes || [0]).map(s => ({
+  label: s ? `${Number(s)} ml` : "Narx",
+  weightKg: s ? (Number(s) + (D.overhead || 250)) / 1000 : null,
+}));
+
+VARIANTS.forEach((v, i)=>{
   const row = document.createElement("div");
   row.className = "row";
   row.innerHTML =
-    `<div class="size">${trim(size)} ml</div>
-     <div class="cny"><input inputmode="decimal" placeholder="¥" data-size="${size}"></div>
-     <div class="out" data-out="${size}">—</div>`;
+    `<div class="size">${v.label}</div>
+     <div class="cny"><input inputmode="decimal" placeholder="¥" data-i="${i}"></div>
+     <div class="out" data-out="${i}">—</div>`;
   rowsEl.appendChild(row);
 });
 
 function trim(n){ return Number(n).toString(); }
 function fmtNum(n){ return Math.round(n).toLocaleString("ru-RU").replace(/ /g," "); }
 function fmtUzs(n){ return fmtNum(Math.round(n/1000)*1000) + " so'm"; }
-
-function weightOf(size){ return (Number(size) + D.overhead)/1000; }
 
 function applyMarkup(base, text){
   const t = (text||"").trim().replace(/\s/g,"").replace(",",".");
@@ -174,29 +188,37 @@ function calc(){
   const finals = {}, lines = [];
   let missing = false;
 
-  D.sizes.forEach(size=>{
-    const input = rowsEl.querySelector(`input[data-size="${size}"]`);
-    const out   = rowsEl.querySelector(`[data-out="${size}"]`);
+  VARIANTS.forEach((v, i)=>{
+    const input = rowsEl.querySelector(`input[data-i="${i}"]`);
+    const out   = rowsEl.querySelector(`[data-out="${i}"]`);
     const cny   = parseFloat((input.value||"").replace(",","."));
     if(isNaN(cny)){ out.textContent = "—"; missing = true; return; }
 
     const base = cny * D.rate;
-    const deliv = weightOf(size) * D.kargoRate;
+    // Vazn ma'lum bo'lsa — o'zi hisoblanadi, bo'lmasa qo'lda kiritilgani
+    const deliv = v.weightKg
+      ? v.weightKg * D.kargoRate
+      : (parseFloat((deliveryEl.value||"").replace(/[\s,]/g,"")) || 0);
     const fin = applyMarkup(base + deliv, markupText);
     if(fin === null){ out.textContent = "—"; missing = true; return; }
 
     out.textContent = fmtUzs(fin);
-    finals[`${trim(size)} ml`] = fmtUzs(fin);
-    lines.push({size, cny, base, deliv, fin});
+    finals[v.label] = fmtUzs(fin);
+    lines.push({label: v.label, weightKg: v.weightKg, cny, base, deliv, fin});
   });
 
   document.getElementById("warn").style.display = missing ? "block" : "none";
 
   document.getElementById("totals").innerHTML = lines.length
-    ? lines.map(l=>
-        `<div class="total"><span>🧴 ${trim(l.size)} ml
-         <div class="muted">${fmtUzs(l.base)} + 🚚 ${fmtUzs(l.deliv)} · ${weightOf(l.size).toFixed(2)} kg</div>
-         </span><b>${fmtUzs(l.fin)}</b></div>`).join("")
+    ? lines.map(l=>{
+        const detail = l.weightKg
+          ? `${fmtUzs(l.base)} + 🚚 ${fmtUzs(l.deliv)} · ${l.weightKg.toFixed(2)} kg`
+          : (l.deliv
+              ? `${fmtUzs(l.base)} + 🚚 ${fmtUzs(l.deliv)}`
+              : `${fmtUzs(l.base)} · yetkazib berish kiritilmagan`);
+        return `<div class="total"><span>🏷 ${l.label}
+          <div class="muted">${detail}</div></span><b>${fmtUzs(l.fin)}</b></div>`;
+      }).join("")
     : `<div class="muted">Narxlarni kiriting</div>`;
 
   // Qo'lda tahrirlanmagan bo'lsa — matnni yangilab turamiz
@@ -239,7 +261,6 @@ function buildPreview(finals){
   }
   if(D.arrival) L.push(`🚚 Yetkazib berish: ${D.arrival}`);
   L.push("");
-  if(D.contact) L.push(`📲 Buyurtma uchun: ${D.contact}`);
   L.push(D.channel || "");
   return L.join("\n");
 }
@@ -258,6 +279,12 @@ resetBtn.addEventListener("click", ()=>{
     "Narx va nomni o'zgartirsangiz bu matn o'zi yangilanadi. Qo'lda tahrirlasangiz — o'zgarmay turadi.";
   calc();
 });
+
+// Vazni noma'lum variant bo'lsa — yetkazib berish maydonini ko'rsatamiz
+if(VARIANTS.some(v => !v.weightKg)){
+  document.getElementById("deliveryCard").style.display = "block";
+}
+deliveryEl.addEventListener("input", calc);
 
 rowsEl.addEventListener("input", calc);
 titleEl.addEventListener("input", calc);
